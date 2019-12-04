@@ -1,0 +1,26 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/nousin?useUnicode=true&characterEncoding=utf8&useSSL=false
+    username: root
+    password: 123456
+
+
+##mybatis
+mybatis:
+  type-aliases-package: com.base.nousin
+  mapper-locations: classpath:mapper/**/*.xml
+
+##mybatis分页插件
+pagehelper:
+  helperDialect: mysql
+  reasonable: true
+
+# 基础路径
+base:
+  dir: /Users/unnous/project/git-clone/SpringbootProject/
+  dir-temp: temp/

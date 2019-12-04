@@ -33,7 +33,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Value("${base.dir}")
     private String baseDir;
-    @Value("${base.dir.temp}")
+    @Value("${base.dir-temp}")
     private String baseDirTemp;
 
     /**
