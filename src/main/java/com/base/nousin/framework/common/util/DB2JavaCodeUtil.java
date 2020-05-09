@@ -25,22 +25,41 @@ import java.util.stream.Collectors;
 public class DB2JavaCodeUtil {
 
     private static final String DRIVER = "com.mysql.jdbc.Driver";
-    private static final String URL = "jdbc:mysql://106.54.194.59:3306/nousin?useUnicode=true&characterEncoding=utf8&useSSL=false";
+    private static final String URL = "jdbc:mysql://localhost:3306/nousin?useUnicode=true&characterEncoding=utf8&useSSL=false";
     private static final String USERNAME = "root";
     private static final String PASSWORD = "123456";
 
     private static final String author = "tangwc"; // 作者
     private static final boolean showColumnLength = false; // 备注显示字段长度
 
+    private static final String subEntityPath = "entity";
+    private static final String subMapperPath = "mapper";
+    private static final String subDaoPath = "dao";
+    private static final String subServicePath = "service";
+    private static final String subControllerPath = "controller";
+    private static final String subDtoPath = "dto";
+
+    private static final String[] strAttr = {"delFlag", "versionNo", "createDate", "createBy", "updateDate", "updateBy"};
+
+    private static final List<String> genericEntityAttributes;
+
+    static {
+        genericEntityAttributes = Arrays.asList(strAttr);
+        List<String> genericEntityAttributesWithId = new ArrayList<>(genericEntityAttributes);
+        genericEntityAttributesWithId.add("id");
+    }
+
     public static void main(String[] args) {
         try {
             String pkg = "com.base.nousin.temp";// 生成文件存在方的包
             String path = getProjectPath() + "src/main/java/" + pkg.replace(".", "/") + "/";// 生成文件存放的路径
+            // /Users/unnous/project/git-clone/SpringbootProject/src/main/java/com/base/nousin/temp/
             System.out.println(path);
             // List<String> tableNameList = Collections.singletonList("t_product_info_ingco");
             for (Table table : getTables()) {
                 // if (!tableNameList.contains(table.getTableName())) { return; }
                 generateEntityFile(path, table, pkg);
+                generateDtoFile(path, table, pkg);
                 generateXmlFile(path, table, pkg);
                 generateDaoFile(path, table, pkg);
                 generateServiceFile(path, table, pkg);
@@ -51,6 +70,11 @@ public class DB2JavaCodeUtil {
         }
     }
 
+    /**
+     * 项目路径
+     *
+     * @return /Users/unnous/project/git-clone/SpringbootProject
+     */
     public static String getProjectPath() {
         return new File(DB2JavaCodeUtil.class.getResource("/").getPath()).getParentFile().getParentFile().getPath() + File.separator;
     }
@@ -66,18 +90,19 @@ public class DB2JavaCodeUtil {
     private static void generateEntityFile(String path, Table table, String pkg) throws IOException {
         String entityName = getTableName4J(table.getTableName());
 
-        File file = new File(path + entityName + ".java");
+        File file = new File(path + subEntityPath + File.separator + entityName + ".java");
         // 判断文件是否存在，存在则返回
         if (!createFileIfAbsent(file)) return;
 
         StringBuilder sb = new StringBuilder();
-        sb.append("package ").append(pkg).append(";\n\n");
-        sb.append("import com.base.nousin.framework.common.web.BaseEntity;\n");
+        sb.append("package ").append(pkg).append(".").append(subEntityPath).append(";\n\n");
+        if (genericTable(table)) sb.append("import com.base.nousin.framework.common.pojo.BaseEntity;\n");
         sb.append("import lombok.Getter;\n");
         sb.append("import lombok.Setter;\n");
         sb.append("import lombok.ToString;\n");
-        List<String> baseEntityContainedType = Arrays.asList("delFlag", "version", "createDate", "createBy", "updateDate", "updateBy");
-        sb.append(getImportJavaClass(table.getColumns().stream().filter(e -> !baseEntityContainedType.contains(e.getCamelColName())).map(Column::getType).collect(Collectors.toSet())));
+        sb.append(getImportJavaClass(table.getColumns().stream()
+                .filter(e -> !genericEntityAttributes.contains(e.getCamelColName()))
+                .map(Column::getType).collect(Collectors.toSet())));
         sb.append("\n\n");
         sb.append("/**\n");
         sb.append(" * TODO\n");
@@ -88,9 +113,13 @@ public class DB2JavaCodeUtil {
         sb.append("@Getter\n");
         sb.append("@Setter\n");
         sb.append("@ToString\n");
-        sb.append("public class ").append(entityName).append(" extends BaseEntity {\n");
+        sb.append("public class ").append(entityName);
+        if (genericTable(table))
+            sb.append(" extends BaseEntity {\n");
+        else
+            sb.append(" {\n");
         for (Column column : table.getColumns()) {
-            if (baseEntityContainedType.contains(column.getCamelColName()))
+            if (genericEntityAttributes.contains(column.getCamelColName()))
                 continue;
             sb.append("\tprivate ").append(getJavaClass(column.getType())).append(" ").append(column.getCamelColName()).append("; // ")
                     .append(column.getComment());
@@ -104,8 +133,158 @@ public class DB2JavaCodeUtil {
         FileOutputStream out = new FileOutputStream(file);
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         out.close();
-        log.info("====文件[ {} ]已生成====", path + entityName + ".java");
-//        log.info(sb.toString());
+        log.info("====文件[ {} ]已生成====", path + subEntityPath + File.separator + entityName + ".java");
+    }
+
+    /**
+     * 是否是整张规则的表
+     *
+     * @param table 表
+     * @return true / false
+     */
+    private static boolean genericTable(Table table) {
+        List<Column> columns = table.getColumns();
+        for (Column column : columns) {
+            if (genericEntityAttributes.contains(column.getCamelColName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 生成Dto
+     *
+     * @param path  路径
+     * @param table 表
+     * @param pkg   包名
+     * @throws Exception
+     */
+    public static void generateDtoFile(String path, Table table, String pkg) throws Exception {
+        String entityName = getTableName4J(table.getTableName());
+        String[] dtoSuffixList = {"PageDto", "InsertDto", "UpdateDto", "Dto"};
+        for (String dtoSuffix : dtoSuffixList) {
+            File file = new File(path + subDtoPath + File.separator + entityName + dtoSuffix + ".java");
+            // 判断文件是否存在，存在则返回
+            if (createFileIfAbsent(file)) {
+
+                StringBuilder sb = new StringBuilder();
+                sb.append("package ").append(pkg).append(".").append(subDtoPath).append(";\n\n");
+                sb.append("import lombok.Getter;\n");
+                sb.append("import lombok.Setter;\n");
+                sb.append(getImportJavaClass(table.getColumns().stream()
+                        .filter(e -> !genericEntityAttributes.contains(e.getCamelColName()))
+                        .map(Column::getType).collect(Collectors.toSet())));
+                sb.append("\n\n");
+                sb.append("/**\n");
+                sb.append(" * TODO\n");
+                sb.append(" *\n");
+                sb.append(" * @author ").append(author).append("\n");
+                sb.append(" * @since ").append(LocalDate.now().toString().replace("-", "/")).append("\n");
+                sb.append(" */\n");
+                sb.append("@Getter\n");
+                sb.append("@Setter\n");
+                sb.append("public class ").append(entityName).append(dtoSuffix).append(" {\n");
+                for (Column column : table.getColumns()) {
+                    if (genericEntityAttributes.contains(column.getCamelColName()))
+                        continue;
+                    sb.append("\tprivate ").append(getJavaClass(column.getType())).append(" ").append(column.getCamelColName()).append("; // ")
+                            .append(column.getComment());
+                    if (showColumnLength && (isString(column.getType()) || isDecimal(column.getType())))
+                        sb.append(" 字段长度[").append(column.getLength()).append("]");
+                    sb.append("\n");
+                }
+                sb.append("}\n");
+
+                // 写入文件
+                FileOutputStream out = new FileOutputStream(file);
+                out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+                out.close();
+                log.info("====文件[ {} ]已生成====", path + subEntityPath + File.separator + entityName + dtoSuffix + ".java");
+            }
+        }
+
+        String pageRequestDto = "PageRequestDto";
+        File file1 = new File(path + subDtoPath + File.separator + entityName + pageRequestDto + ".java");
+        // 判断文件是否存在，存在则返回
+        if (createFileIfAbsent(file1)) {
+
+            StringBuilder sb1 = new StringBuilder();
+            sb1.append("package ").append(pkg).append(".").append(subDtoPath).append(";\n\n");
+            sb1.append("import com.base.nousin.framework.common.pojo.BasePage;\n");
+            sb1.append("import lombok.Getter;\n");
+            sb1.append("import lombok.Setter;\n");
+            sb1.append(getImportJavaClass(table.getColumns().stream()
+                    .filter(e -> !genericEntityAttributes.contains(e.getCamelColName()))
+                    .map(Column::getType).collect(Collectors.toSet())));
+            sb1.append("\n\n");
+            sb1.append("/**\n");
+            sb1.append(" * TODO\n");
+            sb1.append(" *\n");
+            sb1.append(" * @author ").append(author).append("\n");
+            sb1.append(" * @since ").append(LocalDate.now().toString().replace("-", "/")).append("\n");
+            sb1.append(" */\n");
+            sb1.append("@Getter\n");
+            sb1.append("@Setter\n");
+            sb1.append("public class ").append(entityName).append(pageRequestDto).append(" extends BasePage {\n");
+            for (Column column : table.getColumns()) {
+                if (genericEntityAttributes.contains(column.getCamelColName()))
+                    continue;
+                sb1.append("\tprivate ").append(getJavaClass(column.getType())).append(" ").append(column.getCamelColName()).append("; // ")
+                        .append(column.getComment());
+                if (showColumnLength && (isString(column.getType()) || isDecimal(column.getType())))
+                    sb1.append(" 字段长度[").append(column.getLength()).append("]");
+                sb1.append("\n");
+            }
+            sb1.append("}\n");
+
+            // 写入文件
+            FileOutputStream out1 = new FileOutputStream(file1);
+            out1.write(sb1.toString().getBytes(StandardCharsets.UTF_8));
+            out1.close();
+            log.info("====文件[ {} ]已生成====", path + subEntityPath + File.separator + entityName + pageRequestDto + ".java");
+        }
+
+        String deleteDto = "DeleteDto";
+        File file2 = new File(path + subDtoPath + File.separator + entityName + deleteDto + ".java");
+        // 判断文件是否存在，存在则返回
+        if (createFileIfAbsent(file2)) {
+            StringBuilder sb2 = new StringBuilder();
+            sb2.append("package ").append(pkg).append(".").append(subDtoPath).append(";\n\n");
+            sb2.append("import com.base.nousin.framework.common.pojo.BaseDelete;\n");
+            sb2.append("import lombok.Getter;\n");
+            sb2.append("import lombok.Setter;\n");
+            sb2.append(getImportJavaClass(table.getColumns().stream()
+                    .filter(e -> !genericEntityAttributes.contains(e.getCamelColName()))
+                    .map(Column::getType).collect(Collectors.toSet())));
+            sb2.append("\n\n");
+            sb2.append("/**\n");
+            sb2.append(" * TODO\n");
+            sb2.append(" *\n");
+            sb2.append(" * @author ").append(author).append("\n");
+            sb2.append(" * @since ").append(LocalDate.now().toString().replace("-", "/")).append("\n");
+            sb2.append(" */\n");
+            sb2.append("@Getter\n");
+            sb2.append("@Setter\n");
+            sb2.append("public class ").append(entityName).append(deleteDto).append(" extends BaseDelete {\n");
+            for (Column column : table.getColumns()) {
+                if (genericEntityAttributes.contains(column.getCamelColName()))
+                    continue;
+                sb2.append("\tprivate ").append(getJavaClass(column.getType())).append(" ").append(column.getCamelColName()).append("; // ")
+                        .append(column.getComment());
+                if (showColumnLength && (isString(column.getType()) || isDecimal(column.getType())))
+                    sb2.append(" 字段长度[").append(column.getLength()).append("]");
+                sb2.append("\n");
+            }
+            sb2.append("}\n");
+
+            // 写入文件
+            FileOutputStream out2 = new FileOutputStream(file2);
+            out2.write(sb2.toString().getBytes(StandardCharsets.UTF_8));
+            out2.close();
+            log.info("====文件[ {} ]已生成====", path + subEntityPath + File.separator + entityName + deleteDto + ".java");
+        }
+
     }
 
 
@@ -121,15 +300,18 @@ public class DB2JavaCodeUtil {
         String tableName = table.getTableName();
         String entityName = getTableName4J(table.getTableName());
 
-        File file = new File(path + entityName + "Dao.xml");
+
+        File file = new File(path + subMapperPath + File.separator + entityName + "Dao.xml");
         // 判断文件是否存在，存在则返回
         if (!createFileIfAbsent(file)) return;
 
-        String resultType = pkg + "." + entityName;
+        String nameSpace = pkg + "." + subDaoPath + "." + entityName;
+        String resultType = pkg + "." + subEntityPath + "." + entityName;
+        String pageDto = pkg + "." + subDtoPath + "." + entityName + "PageDto";
         StringBuilder sb = new StringBuilder();
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n");
         sb.append("<!DOCTYPE mapper PUBLIC \"-//mybatis.org//DTD Mapper 3.0//EN\" \"http://mybatis.org/dtd/mybatis-3-mapper.dtd\">\n");
-        sb.append("<mapper namespace=\"").append(resultType).append("Dao\">\n");
+        sb.append("<mapper namespace=\"").append(nameSpace).append("Dao\">\n");
         sb.append("\t<sql id=\"baseColumn\">\n");
         for (int i = 0; i < table.getColumns().size(); i++) {
             Column column = table.getColumns().get(i);
@@ -145,36 +327,36 @@ public class DB2JavaCodeUtil {
 
         // get
         sb.append("\t<select id=\"get\" resultType=\"").append(resultType).append("\">\n");
-        sb.append("\t\tSELECT \n");
-        sb.append("\t\t\t<include refid=\"").append(resultType).append("Dao.baseColumn\"/>\n");
-        sb.append("\t\tFROM ").append(tableName).append(" a \n");
-        sb.append("\t\tWHERE a.del_flag=1 and a.id = #{id} \n");
+        sb.append("\t\tselect \n");
+        sb.append("\t\t\t<include refid=\"baseColumn\"/>\n");
+        sb.append("\t\tfrom ").append(tableName).append(" a \n");
+        sb.append("\t\twhere a.del_flag=0 and a.id = #{id} \n");
         sb.append("\t</select>\n");
         sb.append("\n");
 
-        // findList
-        sb.append("\t<select id=\"findList\" resultType=\"").append(resultType).append("\">\n");
-        sb.append("\t\tSELECT\n");
-        sb.append("\t\t\t<include refid=\"").append(resultType).append("Dao.baseColumn\"/>\n");
-        sb.append("\t\tFROM ").append(tableName).append(" a \n");
-        sb.append("\t\tWHERE a.del_flag=1\n");
-        sb.append("\t\tORDER BY a.id\n");
+        // page
+        sb.append("\t<select id=\"page\" resultType=\"").append(pageDto).append("\">\n");
+        sb.append("\t\tselect\n");
+        sb.append("\t\t\t<include refid=\"baseColumn\"/>\n");
+        sb.append("\t\tfrom ").append(tableName).append(" a \n");
+        sb.append("\t\twhere a.del_flag=0\n");
+        sb.append("\t\torder by a.id\n");
         sb.append("\t</select>\n");
         sb.append("\n");
 
-        // findAllList
-        // sb.append("\t<select id=\"findAllList\" resultType=\"").append(resultType).append("\">\n");
-        // sb.append("\t\tSELECT\n");
-        // sb.append("\t\t\t<include refid=\"").append(resultType).append("Dao.baseColumn\"/>\n");
-        // sb.append("\t\tFROM ").append(tableName).append(" a \n");
-        // sb.append("\t\tWHERE a.del_flag=1\n");
-        // sb.append("\t\tORDER BY a.id\n");
-        // sb.append("\t</select>\n");
-        // sb.append("\n");
+        // list
+        sb.append("\t<select id=\"list\" resultType=\"").append(resultType).append("\">\n");
+        sb.append("\t\tselect\n");
+        sb.append("\t\t\t<include refid=\"baseColumn\"/>\n");
+        sb.append("\t\tfrom ").append(tableName).append(" a \n");
+        sb.append("\t\twhere a.del_flag=0\n");
+        sb.append("\t\torder by a.id\n");
+        sb.append("\t</select>\n");
+        sb.append("\n");
 
         // insert
         sb.append("\t<insert id=\"insert\">\n");
-        sb.append("\t\tINSERT INTO ").append(tableName).append("(\n");
+        sb.append("\t\tinsert into ").append(tableName).append("(\n");
         for (int i = 0; i < table.getColumns().size(); i++) {
             String columnName = table.getColumns().get(i).getColName().toLowerCase();
             if ("id".equalsIgnoreCase(columnName)) continue;
@@ -184,7 +366,7 @@ public class DB2JavaCodeUtil {
             else
                 sb.append(",\n");
         }
-        sb.append("\t\t) VALUES (\n");
+        sb.append("\t\t) values (\n");
         for (int i = 0; i < table.getColumns().size(); i++) {
             Column column = table.getColumns().get(i);
             String columnName = column.getColName().toLowerCase();
@@ -192,7 +374,7 @@ public class DB2JavaCodeUtil {
             if ("id".equalsIgnoreCase(columnName)) continue;
 
             if ("del_flag".equalsIgnoreCase(columnName)) {
-                sb.append("\t\t\t1");
+                sb.append("\t\t\t0");
             } else if ("version".equalsIgnoreCase(columnName)) {
                 sb.append("\t\t\t1");
             } else {
@@ -209,7 +391,7 @@ public class DB2JavaCodeUtil {
 
         // update
         sb.append("\t<update id=\"update\">\n");
-        sb.append("\t\tUPDATE ").append(tableName).append(" SET \n");
+        sb.append("\t\tupdate ").append(tableName).append(" SET \n");
         for (int i = 0; i < table.getColumns().size(); i++) {
             Column column = table.getColumns().get(i);
             String columnName = column.getColName().toLowerCase();
@@ -218,7 +400,7 @@ public class DB2JavaCodeUtil {
 
             if ("del_flag".equalsIgnoreCase(columnName)) {
                 sb.append("\t\t\t").append(columnName).append(" = 0");
-            } else if ("version".equalsIgnoreCase(columnName)) {
+            } else if ("version_no".equalsIgnoreCase(columnName)) {
                 sb.append("\t\t\t").append(columnName).append(" = ").append(columnName).append(" + 1");
             } else {
                 sb.append("\t\t\t").append(columnName).append(" = #{").append(column.getCamelColName()).append("}");
@@ -228,15 +410,15 @@ public class DB2JavaCodeUtil {
             else
                 sb.append(",\n");
         }
-        sb.append("\t\tWHERE id = #{id}\n");
+        sb.append("\t\twhere id = #{id} and version_no = #{versionNo}\n");
         sb.append("\t</update>\n");
         sb.append("\n");
         // delete
         sb.append("\t<update id=\"delete\">\n");
-        sb.append("\t\tUPDATE ").append(tableName).append(" SET del_flag = 0, version = version + 1 WHERE id = #{id}\n");
+        sb.append("\t\tupdate ").append(tableName).append(" SET del_flag = 1, version_no = version_no + 1 WHERE id = #{id} and version_no = #{versionNo}\n");
         sb.append("\t</update>\n");
         sb.append("</mapper>\n");
-        log.info("====文件[ {} ]已生成====", path + entityName + "Dao.xml");
+        log.info("====文件[ {} ]已生成====", path + subMapperPath + File.separator + entityName + "Dao.xml");
         // 写入文件
         FileOutputStream out = new FileOutputStream(file);
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
@@ -254,15 +436,18 @@ public class DB2JavaCodeUtil {
     private static void generateDaoFile(String path, Table table, String pkg) throws Exception {
         String entityName = getTableName4J(table.getTableName());
 
-        File file = new File(path + entityName + "Dao.java");
+        File file = new File(path + subDaoPath + File.separator + entityName + "Dao.java");
         // 判断文件是否存在，存在则返回
         if (!createFileIfAbsent(file)) return;
 
         StringBuilder sb = new StringBuilder();
-        sb.append("package ").append(pkg).append(";\n\n");
-        sb.append("import com.base.nousin.framework.common.web.BaseDao;\n");
-        sb.append("import ").append(pkg).append(".").append(entityName).append(";\n");
+        sb.append("package ").append(pkg).append(".").append(subDaoPath).append(";\n\n");
+        sb.append("import ").append(pkg).append(".").append(subEntityPath).append(".").append(entityName).append(";\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("PageRequestDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("PageDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("DeleteDto;\n");
         sb.append("import org.springframework.stereotype.Repository;\n");
+        sb.append("import java.util.List;\n");
         sb.append("\n\n");
         sb.append("/**\n");
         sb.append(" * TODO\n");
@@ -271,14 +456,62 @@ public class DB2JavaCodeUtil {
         sb.append(" * @since ").append(LocalDate.now().toString().replace("-", "/")).append("\n");
         sb.append(" */\n");
         sb.append("@Repository\n");
-        sb.append("public interface ").append(entityName).append("Dao extends BaseDao<").append(entityName).append("> {\n");
-        sb.append("\n");
+        sb.append("public interface ").append(entityName).append("Dao {\n");
+        sb.append("\t\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 获取单条数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param id id\n");
+        sb.append("\t * @return 查询结果\n");
+        sb.append("\t */\n");
+        sb.append("\t").append(entityName).append(" get(Integer id);\n");
+        sb.append("\t\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 查询数据列表\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param requestPageDto 实体参数\n");
+        sb.append("\t * @return 查询结果\n");
+        sb.append("\t */\n");
+        sb.append("\tList<").append(entityName).append("PageDto> page(").append(entityName).append("PageRequestDto requestPageDto);\n");
+        sb.append("\t\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 查询数据列表\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param entity 实体参数\n");
+        sb.append("\t * @return 查询结果\n");
+        sb.append("\t */\n");
+        sb.append("\tList<").append(entityName).append("> list(").append(entityName).append(" entity);\n");
+        sb.append("\t\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 插入数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param entity 实体参数\n");
+        sb.append("\t * @return 新增结果\n");
+        sb.append("\t */\n");
+        sb.append("\tint insert(").append(entityName).append(" entity);\n");
+        sb.append("\t\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 更新数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param entity 实体参数\n");
+        sb.append("\t * @return 更新结果\n");
+        sb.append("\t */\n");
+        sb.append("\tint update(").append(entityName).append(" entity);\n");
+        sb.append("\t\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 删除数据（一般为逻辑删除，更新del_flag字段为1）\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param entity 实体参数\n");
+        sb.append("\t * @return 删除结果\n");
+        sb.append("\t */\n");
+        sb.append("\tint delete(").append(entityName).append("DeleteDto entity);");
+        sb.append("\t\n");
         sb.append("}\n");
         // 写入文件
         FileOutputStream out = new FileOutputStream(file);
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         out.close();
-        log.info("====文件[ {} ]已生成====", path + entityName + "Dao.java");
+        log.info("====文件[ {} ]已生成====", path + subDaoPath + File.separator + entityName + "Dao.java");
     }
 
     /**
@@ -291,22 +524,30 @@ public class DB2JavaCodeUtil {
      */
     private static void generateServiceFile(String path, Table table, String pkg) throws Exception {
         String entityName = getTableName4J(table.getTableName());
-        File file = new File(path + entityName + "Service.java");
+        String entityDaoName = entityName.substring(0, 1).toLowerCase() + entityName.substring(1) + "Dao";
+        File file = new File(path + subServicePath + File.separator + entityName + "Service.java");
         // 判断文件是否存在，存在则返回
         if (!createFileIfAbsent(file)) return;
 
         StringBuilder sb = new StringBuilder();
-        sb.append("package ").append(pkg).append(";\n");
+        sb.append("package ").append(pkg).append(".").append(subServicePath).append(";\n");
         sb.append("\n");
-        // sb.append("import com.github.pagehelper.PageHelper;\n");
-        // sb.append("import com.github.pagehelper.PageInfo;\n");
+        sb.append("import com.github.pagehelper.PageHelper;\n");
+        sb.append("import com.base.nousin.framework.common.pojo.PageVo;\n");
+        sb.append("import com.base.nousin.framework.common.util.DozerUtil;\n");
+        sb.append("import ").append(pkg).append(".").append(subEntityPath).append(".").append(entityName).append(";\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("PageRequestDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("PageDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("Dto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("InsertDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("UpdateDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("DeleteDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDaoPath).append(".").append(entityName).append("Dao;\n");
+        sb.append("import org.springframework.beans.factory.annotation.Autowired;\n");
         sb.append("import org.springframework.stereotype.Service;\n");
-        sb.append("import com.base.nousin.framework.common.web.BaseService;\n");
-        sb.append("import ").append(pkg).append(".").append(entityName).append(";\n");
-        sb.append("import ").append(pkg).append(".").append(entityName).append("Dao;\n");
-        // sb.append("import org.springframework.transaction.annotation.Transactional;\n");
+        sb.append("import org.springframework.transaction.annotation.Transactional;\n");
         sb.append("\n");
-        // sb.append("import java.util.List;\n");
+        sb.append("import java.util.List;\n");
         sb.append("\n\n");
         sb.append("/**\n");
         sb.append(" * TODO\n");
@@ -315,33 +556,83 @@ public class DB2JavaCodeUtil {
         sb.append(" * @since ").append(LocalDate.now().toString().replace("-", "/")).append("\n");
         sb.append(" */\n");
         sb.append("@Service\n");
-//        sb.append("@Transactional(readOnly = true)\n");
-        sb.append("public class ").append(entityName).append("Service extends BaseService<").append(entityName).append("Dao, ").append(entityName).append("> {\n");
+        sb.append("public class ").append(entityName).append("Service  {\n");
         sb.append("\n");
-//        sb.append("\tpublic PageInfo<").append(entityName).append("> findPage(").append(entityName).append(" entity) {\n");
-//        sb.append("\t\tPageHelper.startPage(entity.getPageNum(), entity.getPageSize());\n");
-//        sb.append("\t\treturn new PageInfo<").append(entityName).append(">(dao.findList(entity));\n");
-//        sb.append("\t}\n");
-//        sb.append("\n");
-//        sb.append("\tpublic List<").append(entityName).append("> findAllList(").append(entityName).append(" entity) {\n");
-//        sb.append("\t\treturn dao.findAllList(entity);\n");
-//        sb.append("\t}\n");
-//        sb.append("\n");
-//        sb.append("\t@Transactional\n");
-//        sb.append("\tpublic void save(").append(entityName).append(" entity) {\n");
-//        sb.append("\t\tsuper.save(entity);\n");
-//        sb.append("\t}\n");
-//        sb.append("\n");
-//        sb.append("\t@Transactional\n");
-//        sb.append("\tpublic void delete(").append(entityName).append(" entity) {\n");
-//        sb.append("\t\tsuper.delete(entity);\n");
-//        sb.append("\t}\n");
+        sb.append("\t@Autowired\n");
+        sb.append("\tprivate ").append(entityName).append("Dao ").append(entityDaoName).append(";\n");
+        sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 获取单条数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param id id\n");
+        sb.append("\t * @return 查询结果\n");
+        sb.append("\t */\n");
+        sb.append("\tpublic ").append(entityName).append("Dto get(Integer id) {\n");
+        sb.append("\t\treturn DozerUtil.map(").append(entityDaoName).append(".get(id), ").append(entityName).append("Dto.class);\n");
+        sb.append("\t}\n\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 查询数据列表\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param pageRequestDto 实体参数\n");
+        sb.append("\t * @return 查询结果\n");
+        sb.append("\t */\n");
+        sb.append("\tpublic PageVo<").append(entityName).append("PageDto> findPage(").append(entityName).append("PageRequestDto pageRequestDto) {\n");
+        sb.append("\t\tPageHelper.startPage(pageRequestDto.getPageNum(), pageRequestDto.getPageSize());\n");
+        sb.append("\t\treturn new PageVo<>(").append(entityDaoName).append(".page(pageRequestDto));\n");
+        sb.append("\t}\n");
+        sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 查询数据列表\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param pageRequestDto 实体参数\n");
+        sb.append("\t * @return 查询结果\n");
+        sb.append("\t */\n");
+        sb.append("\tpublic List<").append(entityName).append("> list(").append(entityName).append(" entity) {\n");
+        sb.append("\t\treturn ").append(entityDaoName).append(".list(entity);\n");
+        sb.append("\t}\n");
+        sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 插入数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param dto 参数\n");
+        sb.append("\t * @return 新增结果\n");
+        sb.append("\t */\n");
+        sb.append("\t@Transactional\n");
+        sb.append("\tpublic int insert(").append(entityName).append("InsertDto dto) {\n");
+        sb.append("\t\t").append(entityName).append(" entity = DozerUtil.map(dto, ").append(entityName).append(".class);\n");
+        sb.append("\t\tentity.preInsert();\n");
+        sb.append("\t\treturn ").append(entityDaoName).append(".insert(entity);\n");
+        sb.append("\t}\n");
+        sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 更新数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param dto 参数\n");
+        sb.append("\t * @return 更新结果\n");
+        sb.append("\t */\n");
+        sb.append("\t@Transactional\n");
+        sb.append("\tpublic int update(").append(entityName).append("UpdateDto dto) {\n");
+        sb.append("\t\t").append(entityName).append(" entity = DozerUtil.map(dto, ").append(entityName).append(".class);\n");
+        sb.append("\t\tentity.preUpdate();\n");
+        sb.append("\t\treturn ").append(entityDaoName).append(".update(entity);\n");
+        sb.append("\t}\n");
+        sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 删除数据（一般为逻辑删除，更新del_flag字段为1）\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param entity 实体参数\n");
+        sb.append("\t * @return 删除结果\n");
+        sb.append("\t */\n");
+        sb.append("\t@Transactional\n");
+        sb.append("\tpublic int delete(").append(entityName).append("DeleteDto entity) {\n");
+        sb.append("\t\treturn ").append(entityDaoName).append(".delete(entity);\n");
+        sb.append("\t}\n");
         sb.append("}");
         // 写入文件
         FileOutputStream out = new FileOutputStream(file);
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         out.close();
-        log.info("====文件[ {} ]已生成====", path + entityName + "Service.java");
+        log.info("====文件[ {} ]已生成====", path + subServicePath + File.separator + entityName + "Service.java");
     }
 
     /**
@@ -354,19 +645,34 @@ public class DB2JavaCodeUtil {
      */
     private static void generateControllerFile(String path, Table table, String pkg) throws Exception {
         String entityName = getTableName4J(table.getTableName());
-
-        File file = new File(path + entityName + "Controller.java");
+        String entityServiceName = entityName.substring(0, 1).toLowerCase() + entityName.substring(1) + "Service";
+        File file = new File(path + subControllerPath + File.separator + entityName + "Controller.java");
         // 判断文件是否存在，存在则返回
         if (!createFileIfAbsent(file)) return;
 
         StringBuilder sb = new StringBuilder();
-        sb.append("package ").append(pkg).append(";\n");
+        sb.append("package ").append(pkg).append(".").append(subControllerPath).append(";\n");
         sb.append("\n");
-        sb.append("import ").append(pkg).append(".").append(entityName).append("Service;\n");
+        sb.append("import ").append(pkg).append(".").append(subServicePath).append(".").append(entityName).append("Service;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("PageRequestDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("PageDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("Dto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("InsertDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("UpdateDto;\n");
+        sb.append("import ").append(pkg).append(".").append(subDtoPath).append(".").append(entityName).append("DeleteDto;\n");
+        sb.append("import com.base.nousin.framework.common.pojo.PageVo;\n");
+        sb.append("import com.base.nousin.framework.common.pojo.ResultDto;\n");
+        sb.append("import com.base.nousin.framework.common.util.ResultUtil;\n");
         sb.append("import lombok.extern.slf4j.Slf4j;\n");
-        sb.append("import org.springframework.beans.factory.annotation.Autowired;\n");
-        sb.append("import org.springframework.web.bind.annotation.RequestMapping;\n");
         sb.append("import org.springframework.web.bind.annotation.RestController;\n");
+        sb.append("import org.springframework.web.bind.annotation.RequestMapping;\n");
+        sb.append("import org.springframework.web.bind.annotation.GetMapping;\n");
+        sb.append("import org.springframework.web.bind.annotation.PostMapping;\n");
+        sb.append("import org.springframework.web.bind.annotation.PutMapping;\n");
+        sb.append("import org.springframework.web.bind.annotation.DeleteMapping;\n");
+        sb.append("import org.springframework.web.bind.annotation.PathVariable;\n");
+        sb.append("import org.springframework.web.bind.annotation.RequestParam;\n");
+        sb.append("import org.springframework.beans.factory.annotation.Autowired;\n");
         sb.append("\n\n");
         sb.append("/**\n");
         sb.append(" * TODO\n");
@@ -378,18 +684,74 @@ public class DB2JavaCodeUtil {
         sb.append("@RequestMapping(value = \"\")\n");
         sb.append("@Slf4j\n");
         sb.append("public class ").append(entityName).append("Controller {\n");
-        sb.append("\n");
         sb.append("\t@Autowired\n");
         sb.append("\tprivate ").append(entityName).append("Service service;\n");
         sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 获取明细数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param id id\n");
+        sb.append("\t * @return 查询结果\n");
+        sb.append("\t */\n");
+        sb.append("\t@GetMapping(\"{id}\")\n");
+        sb.append("\tpublic ResultDto<").append(entityName).append("Dto> get(@PathVariable(\"id\") Integer id) {\n");
+        sb.append("\t\treturn ResultUtil.success(service.get(id));\n");
+        sb.append("\t}\n");
+        sb.append("\t\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 查询数据列表\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param pageRequestDto 实体参数\n");
+        sb.append("\t * @return 查询结果\n");
+        sb.append("\t */\n");
+        sb.append("\t@GetMapping\n");
+        sb.append("\tpublic ResultDto<PageVo<").append(entityName).append("PageDto>> page(").append(entityName).append("PageRequestDto pageRequestDto) {\n");
+        sb.append("\t\treturn ResultUtil.success(service.findPage(pageRequestDto));\n");
+        sb.append("\t}\n");
         sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 插入数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param dto 参数\n");
+        sb.append("\t * @return 新增结果\n");
+        sb.append("\t */\n");
+        sb.append("\t@PostMapping\n");
+        sb.append("\tpublic ResultDto<Integer> insert(").append(entityName).append("InsertDto dto) {\n");
+        sb.append("\t\treturn ResultUtil.success(service.insert(dto));\n");
+        sb.append("\t}\n");
+        sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 更新数据\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param dto 参数\n");
+        sb.append("\t * @return 更新结果\n");
+        sb.append("\t */\n");
+        sb.append("\t@PutMapping\n");
+        sb.append("\tpublic ResultDto<Integer> update(").append(entityName).append("UpdateDto dto) {\n");
+        sb.append("\t\treturn ResultUtil.success(service.update(dto));\n");
+        sb.append("\t}\n");
+        sb.append("\n");
+        sb.append("\t/**\n");
+        sb.append("\t * 删除数据（一般为逻辑删除，更新del_flag字段为1）\n");
+        sb.append("\t *\n");
+        sb.append("\t * @param id ID\n");
+        sb.append("\t * @param versionNo 版本号\n");
+        sb.append("\t * @return 删除结果\n");
+        sb.append("\t */\n");
+        sb.append("\t@DeleteMapping(\"{id}\")\n");
+        sb.append("\tpublic ResultDto<Integer> delete(@PathVariable(\"id\") Integer id, @RequestParam Integer versionNo) {\n");
+        sb.append("\t\t").append(entityName).append("DeleteDto deleteDto = new ").append(entityName).append("DeleteDto();\n");
+        sb.append("\t\tdeleteDto.setId(id);\n");
+        sb.append("\t\tdeleteDto.setVersionNo(versionNo);\n");
+        sb.append("\t\treturn ResultUtil.success(service.delete(deleteDto));\n");
+        sb.append("\t}\n");
         sb.append("}");
 
         // 写入文件
         FileOutputStream out = new FileOutputStream(file);
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         out.close();
-        log.info("====文件[ {} ]已生成====", path + entityName + "Controller.java");
+        log.info("====文件[ {} ]已生成====", path + subControllerPath + File.separator + entityName + "Controller.java");
 //        log.info(sb.toString());
     }
 

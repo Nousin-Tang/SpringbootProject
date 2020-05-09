@@ -1,4 +1,4 @@
-package com.base.nousin.framework.common.dto;
+package com.base.nousin.framework.common.pojo;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -14,8 +14,8 @@ import lombok.Setter;
 @Getter
 @Setter
 @AllArgsConstructor
-public class ResultDto {
+public class ResultDto<T> {
     private String code;
     private String message;
-    private Object data;
+    private T data;
 }

@@ -1,6 +1,6 @@
 package com.base.nousin.framework.handler;
 
-import com.base.nousin.framework.common.dto.ResultDto;
+import com.base.nousin.framework.common.pojo.ResultDto;
 import com.base.nousin.framework.common.util.ResultUtil;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpMethod;

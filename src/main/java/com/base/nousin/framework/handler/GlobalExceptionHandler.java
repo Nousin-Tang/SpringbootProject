@@ -1,6 +1,6 @@
 package com.base.nousin.framework.handler;
 
-import com.base.nousin.framework.common.dto.ResultDto;
+import com.base.nousin.framework.common.pojo.ResultDto;
 import com.base.nousin.framework.common.util.ResultUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.ControllerAdvice;
