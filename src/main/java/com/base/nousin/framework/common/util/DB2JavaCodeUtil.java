@@ -158,7 +158,7 @@ public class DB2JavaCodeUtil {
      * @param path  路径
      * @param table 表
      * @param pkg   包名
-     * @throws Exception
+     * @throws Exception 异常信息
      */
     public static void generateDtoFile(String path, Table table, String pkg) throws Exception {
         String entityName = getTableName4J(table.getTableName());
@@ -294,9 +294,9 @@ public class DB2JavaCodeUtil {
      * @param path  路径
      * @param table 表名
      * @param pkg   包名
-     * @throws Exception
+     * @throws Exception 异常信息
      */
-    private static void generateXmlFile(String path, Table table, String pkg) throws IOException {
+    private static void generateXmlFile(String path, Table table, String pkg) throws Exception {
         String tableName = table.getTableName();
         String entityName = getTableName4J(table.getTableName());
 
@@ -431,7 +431,7 @@ public class DB2JavaCodeUtil {
      * @param path  路径
      * @param table 表名
      * @param pkg   包名
-     * @throws Exception
+     * @throws Exception 异常信息
      */
     private static void generateDaoFile(String path, Table table, String pkg) throws Exception {
         String entityName = getTableName4J(table.getTableName());
@@ -641,11 +641,11 @@ public class DB2JavaCodeUtil {
      * @param path  路径
      * @param table 表名
      * @param pkg   包名
-     * @throws Exception
+     * @throws Exception 异常信息
      */
     private static void generateControllerFile(String path, Table table, String pkg) throws Exception {
         String entityName = getTableName4J(table.getTableName());
-        String entityServiceName = entityName.substring(0, 1).toLowerCase() + entityName.substring(1) + "Service";
+        String entityServiceName = entityName + "Service";
         File file = new File(path + subControllerPath + File.separator + entityName + "Controller.java");
         // 判断文件是否存在，存在则返回
         if (!createFileIfAbsent(file)) return;
@@ -684,8 +684,9 @@ public class DB2JavaCodeUtil {
         sb.append("@RequestMapping(value = \"\")\n");
         sb.append("@Slf4j\n");
         sb.append("public class ").append(entityName).append("Controller {\n");
+        sb.append("\t\n");
         sb.append("\t@Autowired\n");
-        sb.append("\tprivate ").append(entityName).append("Service service;\n");
+        sb.append("\tprivate ").append(entityServiceName).append(" service;\n");
         sb.append("\n");
         sb.append("\t/**\n");
         sb.append("\t * 获取明细数据\n");
